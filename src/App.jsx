@@ -1165,7 +1165,6 @@ function AttendancePage({
     </>
   );
 }
-
 function Assignments({
   user,
   state,
@@ -1174,40 +1173,140 @@ function Assignments({
 
   const myAssignments = state.assignments || [];
 
-  async function submit(id) {
-    try {
-      await api("/api/submissions", {
-        method: "POST",
-        body: JSON.stringify({
-          assignment_id: Number(id),
-          student_id: Number(user.id),
-          file_name: "submission.pdf"
-        })
-      });
+  const [selectedFiles, setSelectedFiles] = useState({});
+  const [uploading, setUploading] = useState(null);
 
-      await refresh();
-      alert("Assignment submitted successfully.");
-    } catch (err) {
-      alert(err.message || "Unable to submit assignment.");
+  function selectFile(assignmentId, file) {
+
+    if (!file) return;
+
+    // 5 MB limit
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File size must be 5 MB or less.");
+      return;
     }
+
+    setSelectedFiles(prev => ({
+      ...prev,
+      [assignmentId]: file
+    }));
   }
 
+
+  async function submit(id) {
+
+    const file = selectedFiles[id];
+
+    if (!file) {
+      alert("Please select a file before submitting.");
+      return;
+    }
+
+    try {
+
+      setUploading(id);
+
+      const formData = new FormData();
+
+      formData.append(
+        "student_id",
+        String(user.id)
+      );
+
+      formData.append(
+        "file",
+        file
+      );
+
+      formData.append(
+        "student_notes",
+        ""
+      );
+
+
+      const response = await fetch(
+        `/api/assignments/${id}/submit`,
+        {
+          method: "POST",
+          body: formData
+        }
+      );
+
+
+      const data = await response.json();
+
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail ||
+          "Unable to submit assignment."
+        );
+      }
+
+
+      // Remove selected file after successful upload
+      setSelectedFiles(prev => {
+
+        const copy = { ...prev };
+
+        delete copy[id];
+
+        return copy;
+
+      });
+
+
+      await refresh();
+
+      alert(
+        "Assignment submitted successfully."
+      );
+
+    } catch (err) {
+
+      alert(
+        err.message ||
+        "Unable to submit assignment."
+      );
+
+    } finally {
+
+      setUploading(null);
+
+    }
+
+  }
+
+
   return (
+
     <div className="card">
 
       <div className="section-title">
+
         <div>
-          <h2>Assignments</h2>
+
+          <h2>
+            Assignments
+          </h2>
+
           <span>
             {myAssignments.length} assignments available
           </span>
+
         </div>
+
       </div>
 
+
       {!myAssignments.length ? (
+
         <div className="empty">
+
           No assignments have been posted yet.
+
         </div>
+
       ) : (
 
         <div className="table-wrap">
@@ -1215,15 +1314,37 @@ function Assignments({
           <table>
 
             <thead>
+
               <tr>
-                <th>Assignment</th>
-                <th>Subject</th>
-                <th>Due</th>
-                <th>Marks</th>
-                <th>Status</th>
-                <th>Action</th>
+
+                <th>
+                  Assignment
+                </th>
+
+                <th>
+                  Subject
+                </th>
+
+                <th>
+                  Due
+                </th>
+
+                <th>
+                  Marks
+                </th>
+
+                <th>
+                  Status
+                </th>
+
+                <th>
+                  Upload
+                </th>
+
               </tr>
+
             </thead>
+
 
             <tbody>
 
@@ -1232,73 +1353,186 @@ function Assignments({
                 const submission =
                   (state.submissions || []).find(
                     s =>
-                      Number(s.assignment_id) === Number(a.id) &&
-                      Number(s.student_id) === Number(user.id)
+                      Number(s.assignment_id) ===
+                        Number(a.id) &&
+                      Number(s.student_id) ===
+                        Number(user.id)
                   );
 
+
+                const selectedFile =
+                  selectedFiles[a.id];
+
+
                 return (
+
                   <tr key={a.id}>
 
                     <td>
-                      <b>{a.title}</b>
+
+                      <b>
+                        {a.title}
+                      </b>
 
                       {a.description && (
+
                         <div className="small-muted">
+
                           {a.description}
+
                         </div>
+
                       )}
+
                     </td>
 
-                    <td>{a.subject}</td>
-
-                    <td>{a.due_date}</td>
-
-                    <td>{a.max_marks}</td>
 
                     <td>
+                      {a.subject}
+                    </td>
+
+
+                    <td>
+                      {a.due_date}
+                    </td>
+
+
+                    <td>
+                      {a.max_marks}
+                    </td>
+
+
+                    <td>
+
                       {submission ? (
+
                         <span
                           className={
                             "badge " +
                             (
-                              submission.status === "Graded"
+                              submission.status ===
+                              "Graded"
                                 ? "green"
                                 : "blue"
                             )
                           }
                         >
+
                           {submission.status}
+
                           {submission.marks != null
                             ? ` • ${submission.marks}/${a.max_marks}`
                             : ""}
+
                         </span>
+
                       ) : (
+
                         <span className="badge orange">
+
                           Pending
+
                         </span>
+
                       )}
+
                     </td>
 
+
                     <td>
-                      {!submission && (
-                        <button
-                          className="btn primary"
-                          onClick={() => submit(a.id)}
+
+                      {submission ? (
+
+                        <div>
+
+                          <div className="small-muted">
+
+                            ✓ {submission.file_name}
+
+                          </div>
+
+                          {submission.file_size && (
+
+                            <div className="small-muted">
+
+                              {(
+                                submission.file_size /
+                                1024
+                              ).toFixed(1)} KB
+
+                            </div>
+
+                          )}
+
+                        </div>
+
+                      ) : (
+
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 8,
+                            minWidth: 220
+                          }}
                         >
-                          <Upload size={13} />
-                          Submit
-                        </button>
+
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png"
+                            onChange={e =>
+                              selectFile(
+                                a.id,
+                                e.target.files?.[0]
+                              )
+                            }
+                          />
+
+
+                          {selectedFile && (
+
+                            <div className="small-muted">
+
+                              Selected:
+                              {" "}
+                              <b>
+                                {selectedFile.name}
+                              </b>
+
+                            </div>
+
+                          )}
+
+
+                          <button
+                            className="btn primary"
+                            disabled={
+                              uploading === a.id ||
+                              !selectedFile
+                            }
+                            onClick={() =>
+                              submit(a.id)
+                            }
+                          >
+
+                            <Upload size={13} />
+
+                            {uploading === a.id
+                              ? "Uploading..."
+                              : "Submit Assignment"}
+
+                          </button>
+
+                        </div>
+
                       )}
 
-                      {submission && (
-                        <span className="small-muted">
-                          Submitted
-                        </span>
-                      )}
                     </td>
 
                   </tr>
+
                 );
+
               })}
 
             </tbody>
@@ -1306,12 +1540,14 @@ function Assignments({
           </table>
 
         </div>
+
       )}
 
     </div>
-  );
-}
 
+  );
+
+}
 // ============================================================
 // RESULTS
 // ============================================================
@@ -1879,10 +2115,6 @@ function FacultyAttendance({
   );
 }
 
-// ============================================================
-// FACULTY ASSIGNMENTS
-// ============================================================
-
 function FacultyAssignments({
   user,
   state,
@@ -1893,6 +2125,10 @@ function FacultyAssignments({
 
   const [query, setQuery] = useState("");
 
+  const [selectedAssignment, setSelectedAssignment] =
+    useState(null);
+
+
   const [form, setForm] = useState({
     title: "",
     subject: "Database Management Systems",
@@ -1902,46 +2138,68 @@ function FacultyAssignments({
   });
 
 
-  const assignments = state.assignments
-    .filter(
-      a => a.created_by === user.id
-    )
-    .filter(a =>
-      `${a.title || ""} ${a.subject || ""} ${a.description || ""}`
-        .toLowerCase()
-        .includes(query.toLowerCase())
-    );
+  const assignments =
+    (state.assignments || [])
+      .filter(
+        a =>
+          Number(a.created_by) ===
+          Number(user.id)
+      )
+      .filter(a =>
+        `${a.title || ""} ${a.subject || ""} ${a.description || ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase())
+      );
 
 
   async function create() {
 
     if (!form.title.trim()) {
-      alert("Please enter an assignment title.");
+
+      alert(
+        "Please enter an assignment title."
+      );
+
       return;
+
     }
+
 
     try {
 
-      await api("/api/assignments", {
-        method: "POST",
-        body: JSON.stringify({
-          ...form,
-          max_marks: Number(form.max_marks),
-          created_by: user.id
-        })
-      });
+      await api(
+        "/api/assignments",
+        {
+          method: "POST",
+
+          body: JSON.stringify({
+            ...form,
+
+            max_marks:
+              Number(form.max_marks),
+
+            created_by:
+              Number(user.id)
+          })
+        }
+      );
+
 
       setShow(false);
 
+
       setForm({
         title: "",
-        subject: "Database Management Systems",
+        subject:
+          "Database Management Systems",
         description: "",
         due_date: "2026-10-15",
         max_marks: 20
       });
 
-      refresh();
+
+      await refresh();
+
 
     } catch (err) {
 
@@ -1951,12 +2209,48 @@ function FacultyAssignments({
       );
 
     }
+
   }
+
+
+  function getSubmissions(assignmentId) {
+
+    return (
+      state.submissions || []
+    ).filter(
+      s =>
+        Number(s.assignment_id) ===
+        Number(assignmentId)
+    );
+
+  }
+
+
+  function downloadSubmission(submissionId) {
+
+    window.open(
+      `/api/submissions/${submissionId}/file`,
+      "_blank"
+    );
+
+  }
+
+
+  const currentSubmissions =
+    selectedAssignment
+      ? getSubmissions(
+          selectedAssignment.id
+        )
+      : [];
 
 
   return (
 
     <>
+
+      {/* =====================================================
+          ASSIGNMENT MANAGEMENT
+      ===================================================== */}
 
       <div className="card">
 
@@ -1986,18 +2280,26 @@ function FacultyAssignments({
                 borderRadius: 10,
                 background:
                   "var(--card-solid)",
-                color: "var(--text)"
+                color:
+                  "var(--text)"
               }}
-              placeholder="Search assignments..."
+
+              placeholder=
+                "Search assignments..."
+
               value={query}
+
               onChange={e =>
-                setQuery(e.target.value)
+                setQuery(
+                  e.target.value
+                )
               }
             />
 
 
             <button
               className="btn primary"
+
               onClick={() =>
                 setShow(true)
               }
@@ -2038,6 +2340,14 @@ function FacultyAssignments({
                   Marks
                 </th>
 
+                <th>
+                  Submissions
+                </th>
+
+                <th>
+                  Action
+                </th>
+
               </tr>
 
             </thead>
@@ -2045,36 +2355,98 @@ function FacultyAssignments({
 
             <tbody>
 
-              {assignments.map(a => (
+              {assignments.map(a => {
 
-                <tr key={a.id}>
-
-                  <td>
-
-                    <b>
-                      {a.title}
-                    </b>
-
-                  </td>
+                const submissions =
+                  getSubmissions(a.id);
 
 
-                  <td>
-                    {a.subject}
-                  </td>
+                return (
+
+                  <tr key={a.id}>
+
+                    <td>
+
+                      <b>
+                        {a.title}
+                      </b>
+
+                      {a.description && (
+
+                        <div className="small-muted">
+
+                          {a.description}
+
+                        </div>
+
+                      )}
+
+                    </td>
 
 
-                  <td>
-                    {a.due_date}
-                  </td>
+                    <td>
+                      {a.subject}
+                    </td>
 
 
-                  <td>
-                    {a.max_marks}
-                  </td>
+                    <td>
+                      {a.due_date}
+                    </td>
 
-                </tr>
 
-              ))}
+                    <td>
+                      {a.max_marks}
+                    </td>
+
+
+                    <td>
+
+                      {submissions.length === 0 ? (
+
+                        <span className="badge orange">
+
+                          No submissions
+
+                        </span>
+
+                      ) : (
+
+                        <span className="badge blue">
+
+                          {submissions.length}
+                          {" "}
+                          submitted
+
+                        </span>
+
+                      )}
+
+                    </td>
+
+
+                    <td>
+
+                      <button
+                        className="btn secondary"
+
+                        onClick={() =>
+                          setSelectedAssignment(a)
+                        }
+                      >
+
+                        <FileText size={14} />
+
+                        View Submissions
+
+                      </button>
+
+                    </td>
+
+                  </tr>
+
+                );
+
+              })}
 
 
               {assignments.length === 0 && (
@@ -2082,7 +2454,7 @@ function FacultyAssignments({
                 <tr>
 
                   <td
-                    colSpan="4"
+                    colSpan="6"
                     style={{
                       textAlign: "center",
                       padding: 30
@@ -2108,6 +2480,10 @@ function FacultyAssignments({
       </div>
 
 
+      {/* =====================================================
+          CREATE ASSIGNMENT MODAL
+      ===================================================== */}
+
       {show && (
 
         <Modal
@@ -2119,7 +2495,6 @@ function FacultyAssignments({
 
           <div className="form-grid">
 
-
             <div className="field full">
 
               <label>
@@ -2128,13 +2503,17 @@ function FacultyAssignments({
 
               <input
                 value={form.title}
+
                 onChange={e =>
                   setForm({
                     ...form,
-                    title: e.target.value
+                    title:
+                      e.target.value
                   })
                 }
-                placeholder="e.g. SQL Database Design"
+
+                placeholder=
+                  "e.g. SQL Database Design"
               />
 
             </div>
@@ -2148,10 +2527,12 @@ function FacultyAssignments({
 
               <select
                 value={form.subject}
+
                 onChange={e =>
                   setForm({
                     ...form,
-                    subject: e.target.value
+                    subject:
+                      e.target.value
                   })
                 }
               >
@@ -2186,7 +2567,11 @@ function FacultyAssignments({
               <input
                 type="number"
                 min="1"
-                value={form.max_marks}
+
+                value={
+                  form.max_marks
+                }
+
                 onChange={e =>
                   setForm({
                     ...form,
@@ -2194,6 +2579,7 @@ function FacultyAssignments({
                       e.target.value
                   })
                 }
+
               />
 
             </div>
@@ -2207,7 +2593,11 @@ function FacultyAssignments({
 
               <input
                 type="date"
-                value={form.due_date}
+
+                value={
+                  form.due_date
+                }
+
                 onChange={e =>
                   setForm({
                     ...form,
@@ -2215,6 +2605,7 @@ function FacultyAssignments({
                       e.target.value
                   })
                 }
+
               />
 
             </div>
@@ -2228,7 +2619,11 @@ function FacultyAssignments({
 
               <textarea
                 rows="5"
-                value={form.description}
+
+                value={
+                  form.description
+                }
+
                 onChange={e =>
                   setForm({
                     ...form,
@@ -2236,7 +2631,9 @@ function FacultyAssignments({
                       e.target.value
                   })
                 }
-                placeholder="Describe the assignment requirements..."
+
+                placeholder=
+                  "Describe the assignment requirements..."
               />
 
             </div>
@@ -2246,9 +2643,11 @@ function FacultyAssignments({
 
           <button
             className="btn primary"
+
             style={{
               marginTop: 15
             }}
+
             onClick={create}
           >
 
@@ -2257,6 +2656,244 @@ function FacultyAssignments({
             Publish Assignment
 
           </button>
+
+        </Modal>
+
+      )}
+
+
+      {/* =====================================================
+          STUDENT SUBMISSIONS MODAL
+      ===================================================== */}
+
+      {selectedAssignment && (
+
+        <Modal
+          title={
+            `Submissions — ${selectedAssignment.title}`
+          }
+
+          onClose={() =>
+            setSelectedAssignment(null)
+          }
+        >
+
+          <div
+            style={{
+              marginBottom: 15
+            }}
+          >
+
+            <div>
+
+              <b>
+                {selectedAssignment.subject}
+              </b>
+
+            </div>
+
+            <div className="small-muted">
+
+              Due:
+              {" "}
+              {selectedAssignment.due_date}
+              {" • "}
+              Maximum marks:
+              {" "}
+              {selectedAssignment.max_marks}
+
+            </div>
+
+          </div>
+
+
+          {currentSubmissions.length === 0 ? (
+
+            <div className="empty">
+
+              No students have submitted
+              this assignment yet.
+
+            </div>
+
+          ) : (
+
+            <div className="table-wrap">
+
+              <table>
+
+                <thead>
+
+                  <tr>
+
+                    <th>
+                      Student
+                    </th>
+
+                    <th>
+                      Roll No.
+                    </th>
+
+                    <th>
+                      Submitted
+                    </th>
+
+                    <th>
+                      File
+                    </th>
+
+                    <th>
+                      Status
+                    </th>
+
+                    <th>
+                      Action
+                    </th>
+
+                  </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                  {currentSubmissions.map(
+                    submission => (
+
+                      <tr
+                        key={
+                          submission.id
+                        }
+                      >
+
+                        <td>
+
+                          <b>
+
+                            {
+                              submission.student_name ||
+                              `Student #${submission.student_id}`
+                            }
+
+                          </b>
+
+                        </td>
+
+
+                        <td>
+
+                          {
+                            submission.roll_no ||
+                            "—"
+                          }
+
+                        </td>
+
+
+                        <td>
+
+                          {
+                            submission.submitted_at
+                              ? new Date(
+                                  submission.submitted_at
+                                ).toLocaleString()
+                              : "—"
+                          }
+
+                        </td>
+
+
+                        <td>
+
+                          <div>
+
+                            <b>
+
+                              {
+                                submission.file_name ||
+                                "No file"
+                              }
+
+                            </b>
+
+
+                            {submission.file_size && (
+
+                              <div className="small-muted">
+
+                                {(
+                                  submission.file_size /
+                                  1024
+                                ).toFixed(1)}
+                                {" KB"}
+
+                              </div>
+
+                            )}
+
+                          </div>
+
+                        </td>
+
+
+                        <td>
+
+                          <span
+                            className={
+                              "badge " +
+                              (
+                                submission.status ===
+                                "Graded"
+                                  ? "green"
+                                  : "blue"
+                              )
+                            }
+                          >
+
+                            {
+                              submission.status ||
+                              "Submitted"
+                            }
+
+                          </span>
+
+                        </td>
+
+
+                        <td>
+
+                          <button
+                            className="btn secondary"
+
+                            onClick={() =>
+                              downloadSubmission(
+                                submission.id
+                              )
+                            }
+                          >
+
+                            <Download
+                              size={14}
+                            />
+
+                            Download
+
+                          </button>
+
+                        </td>
+
+                      </tr>
+
+                    )
+                  )}
+
+                </tbody>
+
+              </table>
+
+            </div>
+
+          )}
 
         </Modal>
 

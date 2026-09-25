@@ -3,3 +3,4 @@ uvicorn
 pydantic
 psycopg[binary]
 openpyxl
+python-multipart
