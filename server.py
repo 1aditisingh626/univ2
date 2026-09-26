@@ -1,5 +1,8 @@
 import os
 from datetime import datetime, date
+from dotenv import load_dotenv
+
+load_dotenv()
 from typing import Optional
 
 import psycopg
@@ -200,11 +203,6 @@ def prepare_database():
         conn.commit()
 
 
-@app.on_event("startup")
-def startup():
-    print("Preparing PostgreSQL database...")
-    prepare_database()
-    print("PostgreSQL database ready.")
 
 
 # ============================================================

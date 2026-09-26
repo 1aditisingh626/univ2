@@ -3,7 +3,9 @@ from pathlib import Path
 
 import openpyxl
 import psycopg
+from dotenv import load_dotenv
 
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
 EXCEL = BASE_DIR / "unisphere_database.xlsx"

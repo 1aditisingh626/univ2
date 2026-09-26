@@ -93,7 +93,45 @@ async function api(url, options = {}) {
   return response.json();
 }
 
+// ============================================================
+// LIVE DATE / TIME HELPERS
+// ============================================================
 
+function useLiveDateTime() {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return now;
+}
+
+function getTodayName(date = new Date()) {
+  return date.toLocaleDateString("en-US", {
+    weekday: "long"
+  });
+}
+
+function getTodayDate(date = new Date()) {
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+function getLiveTime(date = new Date()) {
+  return date.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
 // ============================================================
 // GLOBAL CSS
 // ============================================================
@@ -440,7 +478,6 @@ function Sidebar({
   );
 }
 
-
 // ============================================================
 // TOPBAR
 // ============================================================
@@ -450,11 +487,137 @@ function Topbar({
   onLogout,
   dark,
   setDark,
-  setOpen
+  setOpen,
+  state,
+  onNavigate
 }) {
 
+  const now = useLiveDateTime();
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+
+  const notices = state?.notices || [];
+  const assignments = state?.assignments || [];
+
+  const searchResults = useMemo(() => {
+
+    const q = query.trim().toLowerCase();
+
+    if (!q) return [];
+
+    const results = [];
+
+    notices.forEach(n => {
+
+      const text =
+        `${n.title || ""} ${n.body || ""} ${n.category || ""}`
+          .toLowerCase();
+
+      if (text.includes(q)) {
+        results.push({
+          type: "Notice",
+          title: n.title,
+          subtitle: n.category || "University notice",
+          page: "Notices"
+        });
+      }
+
+    });
+
+    assignments.forEach(a => {
+
+      const text =
+        `${a.title || ""} ${a.subject || ""} ${a.description || ""}`
+          .toLowerCase();
+
+      if (text.includes(q)) {
+        results.push({
+          type: "Assignment",
+          title: a.title,
+          subtitle: `${a.subject || "Subject"} • Due ${a.due_date || "—"}`,
+          page: "Assignments"
+        });
+      }
+
+    });
+
+    (state?.users || []).forEach(u => {
+
+      const text =
+        `${u.name || ""} ${u.email || ""} ${u.department || ""}`
+          .toLowerCase();
+
+      if (text.includes(q)) {
+
+        results.push({
+          type: u.role === "faculty" ? "Faculty" : "Student",
+          title: u.name,
+          subtitle: `${u.department || ""} • ${u.email || ""}`,
+          page: u.role === "faculty"
+            ? "My Classes"
+            : "Students"
+        });
+
+      }
+
+    });
+
+    return results.slice(0, 8);
+
+  }, [query, notices, assignments, state?.users]);
+
+  const notifications = useMemo(() => {
+
+    const list = [];
+
+    notices.slice(0, 4).forEach(n => {
+
+      list.push({
+        id: `notice-${n.id}`,
+        icon: <Megaphone size={15} />,
+        title: n.title,
+        text: n.body || "New university notice",
+        page: "Notices"
+      });
+
+    });
+
+    assignments.slice(0, 4).forEach(a => {
+
+      list.push({
+        id: `assignment-${a.id}`,
+        icon: <FileText size={15} />,
+        title: "Assignment",
+        text: `${a.title} • Due ${a.due_date}`,
+        page: "Assignments"
+      });
+
+    });
+
+    return list.slice(0, 6);
+
+  }, [notices, assignments]);
+
+  function goTo(page) {
+
+    setSearchOpen(false);
+    setNotificationsOpen(false);
+    setQuery("");
+
+    if (onNavigate) {
+      onNavigate(page);
+    }
+  }
+
   return (
-    <header className="topbar">
+    <header
+      className="topbar"
+      style={{
+        position: "relative"
+      }}
+    >
 
       <div className="top-left">
 
@@ -469,23 +632,298 @@ function Topbar({
           UniSphere University
         </div>
 
-        <input
-          className="search"
-          placeholder="Search portal..."
-        />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            color: "var(--muted)",
+            fontSize: 11
+          }}
+        >
+          <CalendarDays size={14} />
+
+          <span>
+            {getTodayDate(now)}
+          </span>
+
+          <span>•</span>
+
+          <span>
+            {getLiveTime(now)}
+          </span>
+        </div>
 
       </div>
 
 
       <div className="top-actions">
 
-        <button className="icon-btn" title="Search">
-          <Search size={17} />
-        </button>
+        {/* SEARCH */}
 
-        <button className="icon-btn" title="Notifications">
-          <Bell size={17} />
-        </button>
+        <div style={{ position: "relative" }}>
+
+          {searchOpen && (
+
+            <input
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search portal..."
+              style={{
+                position: "absolute",
+                right: 0,
+                top: 47,
+                width: 310,
+                padding: "11px 13px",
+                borderRadius: 12,
+                border: "1px solid var(--border)",
+                background: "var(--card-solid)",
+                color: "var(--text)",
+                outline: "none",
+                boxShadow: "0 15px 40px rgba(20,30,60,.16)",
+                zIndex: 100
+              }}
+            />
+
+          )}
+
+          <button
+            className="icon-btn"
+            title="Search"
+            onClick={() => {
+              setSearchOpen(v => !v);
+              setNotificationsOpen(false);
+            }}
+          >
+            <Search size={17} />
+          </button>
+
+          {searchOpen && query && (
+
+            <div
+              style={{
+                position: "absolute",
+                right: 0,
+                top: 92,
+                width: 360,
+                maxHeight: 390,
+                overflowY: "auto",
+                background: "var(--card-solid)",
+                border: "1px solid var(--border)",
+                borderRadius: 14,
+                boxShadow: "0 20px 50px rgba(20,30,60,.18)",
+                zIndex: 100
+              }}
+            >
+
+              {searchResults.length === 0 ? (
+
+                <div className="empty">
+                  No results found for "{query}"
+                </div>
+
+              ) : (
+
+                searchResults.map((result, index) => (
+
+                  <button
+                    key={`${result.type}-${index}`}
+                    onClick={() => goTo(result.page)}
+                    style={{
+                      width: "100%",
+                      border: 0,
+                      background: "transparent",
+                      color: "var(--text)",
+                      padding: "12px 14px",
+                      textAlign: "left",
+                      borderBottom:
+                        "1px solid var(--border)"
+                    }}
+                  >
+
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--primary)",
+                        fontWeight: 800,
+                        marginBottom: 3
+                      }}
+                    >
+                      {result.type}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 750
+                      }}
+                    >
+                      {result.title}
+                    </div>
+
+                    <div className="small-muted">
+                      {result.subtitle}
+                    </div>
+
+                  </button>
+
+                ))
+
+              )}
+
+            </div>
+
+          )}
+
+        </div>
+
+
+        {/* NOTIFICATIONS */}
+
+        <div style={{ position: "relative" }}>
+
+          <button
+            className="icon-btn"
+            title="Notifications"
+            onClick={() => {
+              setNotificationsOpen(v => !v);
+              setSearchOpen(false);
+            }}
+          >
+
+            <Bell size={17} />
+
+            {notifications.length > 0 && (
+
+              <span
+                style={{
+                  position: "absolute",
+                  top: -2,
+                  right: -2,
+                  minWidth: 17,
+                  height: 17,
+                  padding: "0 4px",
+                  borderRadius: 99,
+                  background: "var(--danger)",
+                  color: "white",
+                  fontSize: 9,
+                  fontWeight: 800,
+                  display: "grid",
+                  placeItems: "center"
+                }}
+              >
+                {notifications.length}
+              </span>
+
+            )}
+
+          </button>
+
+
+          {notificationsOpen && (
+
+            <div
+              style={{
+                position: "absolute",
+                right: 0,
+                top: 48,
+                width: 360,
+                maxHeight: 430,
+                overflowY: "auto",
+                background: "var(--card-solid)",
+                border: "1px solid var(--border)",
+                borderRadius: 15,
+                boxShadow: "0 20px 50px rgba(20,30,60,.18)",
+                zIndex: 100
+              }}
+            >
+
+              <div
+                style={{
+                  padding: "15px 16px",
+                  borderBottom: "1px solid var(--border)",
+                  display: "flex",
+                  justifyContent: "space-between"
+                }}
+              >
+
+                <b>Notifications</b>
+
+                <span className="badge blue">
+                  {notifications.length} new
+                </span>
+
+              </div>
+
+
+              {notifications.length === 0 ? (
+
+                <div className="empty">
+                  You're all caught up 🎉
+                </div>
+
+              ) : (
+
+                notifications.map(n => (
+
+                  <button
+                    key={n.id}
+                    onClick={() => goTo(n.page)}
+                    style={{
+                      width: "100%",
+                      border: 0,
+                      background: "transparent",
+                      color: "var(--text)",
+                      padding: "13px 15px",
+                      display: "flex",
+                      gap: 11,
+                      textAlign: "left",
+                      borderBottom:
+                        "1px solid var(--border)"
+                    }}
+                  >
+
+                    <div className="icon-tile">
+                      {n.icon}
+                    </div>
+
+                    <div>
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 800
+                        }}
+                      >
+                        {n.title}
+                      </div>
+
+                      <div
+                        className="small-muted"
+                        style={{
+                          marginTop: 3
+                        }}
+                      >
+                        {n.text}
+                      </div>
+
+                    </div>
+
+                  </button>
+
+                ))
+
+              )}
+
+            </div>
+
+          )}
+
+        </div>
+
+
+        {/* DARK MODE */}
 
         <button
           className="icon-btn"
@@ -497,24 +935,24 @@ function Topbar({
           }
         </button>
 
+
+        {/* PROFILE */}
+
         <div className="profile-chip">
 
           <div className="avatar">
             {user.name
               .split(" ")
               .map(x => x[0])
-              .slice(0,2)
+              .slice(0, 2)
               .join("")
             }
           </div>
 
-          <div style={{
-            display:"none"
-          }}>
-            {user.name}
-          </div>
-
         </div>
+
+
+        {/* LOGOUT */}
 
         <button
           className="icon-btn"
@@ -529,7 +967,6 @@ function Topbar({
     </header>
   );
 }
-
 
 // ============================================================
 // METRIC
@@ -570,8 +1007,6 @@ function Metric({
     </div>
   );
 }
-
-
 // ============================================================
 // STUDENT DASHBOARD
 // ============================================================
@@ -582,75 +1017,275 @@ function StudentDashboard({
   attendance
 }) {
 
-  const myAssignments = state.assignments || [];
+  // ------------------------------------------------------------
+  // LIVE DATE / TIME
+  // ------------------------------------------------------------
 
-  const myResults = state.results.filter(
-    r => r.student_id === user.id
-  );
+  const now = useLiveDateTime();
 
-  const mySubmissions = state.submissions.filter(
-    s => s.student_id === user.id
-  );
+  const todayName =
+    getTodayName(now);
+
+  const todayDate =
+    getTodayDate(now);
+
+
+  // Local YYYY-MM-DD
+  const todayISO =
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+
+  // ------------------------------------------------------------
+  // SAFE DATA
+  // ------------------------------------------------------------
+
+  const myAssignments =
+    state.assignments || [];
+
+
+  const myResults =
+    (state.results || []).filter(
+      r =>
+        Number(r.student_id) ===
+        Number(user.id)
+    );
+
+
+  const mySubmissions =
+    (state.submissions || []).filter(
+      s =>
+        Number(s.student_id) ===
+        Number(user.id)
+    );
+
+
+  // ------------------------------------------------------------
+  // AVERAGE MARKS
+  // ------------------------------------------------------------
 
   const avg =
     myResults.length
+
       ? (
-        myResults.reduce(
-          (sum,r) => sum + r.total,
-          0
-        ) / myResults.length
-      ).toFixed(1)
+          myResults.reduce(
+            (sum, r) =>
+              sum +
+              Number(r.total || 0),
+            0
+          ) /
+          myResults.length
+        ).toFixed(1)
+
       : "—";
+
+
+  // ------------------------------------------------------------
+  // OVERALL ATTENDANCE
+  // ------------------------------------------------------------
 
   const overallAttendance =
-    attendance.length
+    attendance && attendance.length
+
       ? (
-        attendance.reduce(
-          (sum,a) => sum + a.percentage,
-          0
-        ) / attendance.length
-      ).toFixed(1)
+          attendance.reduce(
+            (sum, a) =>
+              sum +
+              Number(a.percentage || 0),
+            0
+          ) /
+          attendance.length
+        ).toFixed(1)
+
       : "—";
 
-  const fee =
-    state.users.find(
-      u => u.id === user.id
-    );
+
+  // ------------------------------------------------------------
+  // TODAY'S ATTENDANCE
+  // ------------------------------------------------------------
+
+  const todayAttendance =
+    (state.attendance || []).filter(record => {
+
+      return (
+        Number(record.student_id) ===
+          Number(user.id) &&
+
+        String(record.date).slice(0, 10) ===
+          todayISO
+      );
+
+    });
+
+
+  const presentToday =
+    todayAttendance.filter(
+      record =>
+        record.present === true
+    ).length;
+
+
+  const absentToday =
+    todayAttendance.filter(
+      record =>
+        record.present === false
+    ).length;
+
+
+  const totalToday =
+    todayAttendance.length;
+
+
+  const todayAttendancePercentage =
+    totalToday > 0
+
+      ? Math.round(
+          (presentToday /
+            totalToday) *
+            100
+        )
+
+      : null;
+
+
+  // ------------------------------------------------------------
+  // TODAY'S TIMETABLE
+  // ------------------------------------------------------------
+
+  const todayTimetable =
+    (state.timetable || [])
+
+      .filter(item => {
+
+        const sameDay =
+          String(item.day || "")
+            .toLowerCase() ===
+          todayName.toLowerCase();
+
+
+        const sameClass =
+          !item.class_year ||
+          !user.class_year ||
+          String(item.class_year)
+            .trim() ===
+          String(user.class_year)
+            .trim();
+
+
+        return (
+          sameDay &&
+          sameClass
+        );
+
+      })
+
+      .sort((a, b) => {
+
+        return String(
+          a.start_time || ""
+        ).localeCompare(
+          String(
+            b.start_time || ""
+          )
+        );
+
+      })
+
+      .slice(0, 4);
+
+
+  // ------------------------------------------------------------
+  // RENDER
+  // ------------------------------------------------------------
 
   return (
+
     <>
+
+      {/* ======================================================
+          HERO
+      ====================================================== */}
+
       <div className="hero">
 
         <h1>
-          Good morning, {user.name.split(" ")[0]} 👋
+          Good morning,{" "}
+          {user.name.split(" ")[0]} 👋
         </h1>
 
         <p>
-          {user.class_year} {user.department}
+          {user.class_year}
+          {" "}
+          {user.department}
           {" • "}
           Semester V
           {" • "}
           {user.roll_no}
         </p>
 
+
+        <div
+          style={{
+            marginTop: 8,
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            color: "#dce5ff",
+            fontSize: 12
+          }}
+        >
+
+          <span>
+            📅 {todayName}, {todayDate}
+          </span>
+
+          <span>
+            •
+          </span>
+
+          <span>
+            🕒 {getLiveTime(now)}
+          </span>
+
+        </div>
+
       </div>
 
+
+      {/* ======================================================
+          METRICS
+      ====================================================== */}
 
       <div className="grid-4">
 
         <Metric
           icon={ClipboardCheck}
           label="Overall Attendance"
-          value={overallAttendance + "%"}
-          note={Number(overallAttendance) >= 75 ? "Good" : "Low"}
+          value={
+            overallAttendance === "—"
+              ? "—"
+              : `${overallAttendance}%`
+          }
+          note={
+            overallAttendance === "—"
+              ? "No data"
+              : Number(overallAttendance) >= 75
+                ? "Good"
+                : "Low"
+          }
         />
+
 
         <Metric
           icon={Trophy}
           label="Average Marks"
-          value={avg + "%"}
+          value={
+            avg === "—"
+              ? "—"
+              : `${avg}%`
+          }
           note="Semester"
         />
+
 
         <Metric
           icon={BookOpen}
@@ -658,6 +1293,7 @@ function StudentDashboard({
           value="4"
           note="Current"
         />
+
 
         <Metric
           icon={WalletCards}
@@ -669,58 +1305,108 @@ function StudentDashboard({
       </div>
 
 
+      {/* ======================================================
+          TIMETABLE + NOTICES
+      ====================================================== */}
+
       <div className="grid-2">
+
+        {/* TODAY'S TIMETABLE */}
 
         <div className="card">
 
           <div className="section-title">
-            <h2>
-              Today's Timetable
-            </h2>
+
+            <div>
+
+              <h2>
+                Today's Timetable
+              </h2>
+
+              <span
+                style={{
+                  display: "block",
+                  marginTop: 4
+                }}
+              >
+                {todayName}, {todayDate}
+              </span>
+
+            </div>
 
             <span>
-              TY Computer Engineering
+              {user.class_year ||
+                "Current Class"}
             </span>
+
           </div>
 
-          {state.timetable
-            .filter(x => x.day === "Monday")
-            .slice(0,4)
-            .map(x => (
+
+          {todayTimetable.length > 0 ? (
+
+            todayTimetable.map(item => (
 
               <div
-                key={x.id}
+                key={item.id}
                 style={{
-                  display:"flex",
-                  gap:13,
-                  padding:"13px 0",
-                  borderBottom:"1px solid var(--border)"
+                  display: "flex",
+                  gap: 13,
+                  padding: "13px 0",
+                  borderBottom:
+                    "1px solid var(--border)"
                 }}
               >
 
-                <div style={{
-                  width:70,
-                  fontWeight:800,
-                  fontSize:12
-                }}>
-                  {x.start_time}
+                <div
+                  style={{
+                    width: 70,
+                    fontWeight: 800,
+                    fontSize: 12
+                  }}
+                >
+
+                  {item.start_time}
+
+                  {item.end_time && (
+
+                    <div
+                      style={{
+                        color:
+                          "var(--muted)",
+                        fontSize: 10,
+                        marginTop: 3
+                      }}
+                    >
+                      {item.end_time}
+                    </div>
+
+                  )}
+
                 </div>
+
 
                 <div>
 
-                  <div style={{
-                    fontWeight:700,
-                    fontSize:13
-                  }}>
-                    {x.subject}
+                  <div
+                    style={{
+                      fontWeight: 700,
+                      fontSize: 13
+                    }}
+                  >
+                    {item.subject}
                   </div>
 
-                  <div style={{
-                    color:"var(--muted)",
-                    fontSize:11,
-                    marginTop:3
-                  }}>
-                    {x.faculty} • {x.room}
+                  <div
+                    style={{
+                      color:
+                        "var(--muted)",
+                      fontSize: 11,
+                      marginTop: 3
+                    }}
+                  >
+                    {item.faculty}
+                    {" • "}
+                    {item.room}
                   </div>
 
                 </div>
@@ -728,19 +1414,269 @@ function StudentDashboard({
               </div>
 
             ))
-          }
+
+          ) : (
+
+            <div className="empty">
+
+              <div
+                style={{
+                  fontSize: 28,
+                  marginBottom: 8
+                }}
+              >
+                📚
+              </div>
+
+              <b>
+                No classes today
+              </b>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  marginTop: 5
+                }}
+              >
+                Enjoy your day! 🎉
+              </div>
+
+            </div>
+
+          )}
 
         </div>
 
 
+        {/* NOTICES */}
+
         <NoticeCard
-          notices={state.notices.slice(0,4)}
+          notices={
+            (state.notices || [])
+              .slice(0, 4)
+          }
         />
 
       </div>
 
 
+      {/* ======================================================
+          TODAY'S ATTENDANCE + PERFORMANCE
+      ====================================================== */}
+
       <div className="grid-2">
+
+        {/* TODAY'S ATTENDANCE */}
+
+        <div className="card">
+
+          <div className="section-title">
+
+            <div>
+
+              <h2>
+                Today's Attendance
+              </h2>
+
+              <span
+                style={{
+                  display: "block",
+                  marginTop: 4
+                }}
+              >
+                {todayName}, {todayDate}
+              </span>
+
+            </div>
+
+
+            {todayAttendancePercentage !==
+              null && (
+
+              <span
+                className={
+                  todayAttendancePercentage >= 75
+                    ? "badge green"
+                    : "badge orange"
+                }
+              >
+                {todayAttendancePercentage}%
+              </span>
+
+            )}
+
+          </div>
+
+
+          {totalToday > 0 ? (
+
+            <>
+
+              {/* SUMMARY */}
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(3,1fr)",
+                  gap: 10,
+                  marginBottom: 15
+                }}
+              >
+
+                <div
+                  className="stat-pill"
+                  style={{
+                    textAlign: "center",
+                    padding: 14
+                  }}
+                >
+                  <b
+                    style={{
+                      display: "block",
+                      fontSize: 22
+                    }}
+                  >
+                    {presentToday}
+                  </b>
+
+                  Present
+                </div>
+
+
+                <div
+                  className="stat-pill"
+                  style={{
+                    textAlign: "center",
+                    padding: 14
+                  }}
+                >
+                  <b
+                    style={{
+                      display: "block",
+                      fontSize: 22
+                    }}
+                  >
+                    {absentToday}
+                  </b>
+
+                  Absent
+                </div>
+
+
+                <div
+                  className="stat-pill"
+                  style={{
+                    textAlign: "center",
+                    padding: 14
+                  }}
+                >
+                  <b
+                    style={{
+                      display: "block",
+                      fontSize: 22
+                    }}
+                  >
+                    {totalToday}
+                  </b>
+
+                  Classes
+                </div>
+
+              </div>
+
+
+              {/* SUBJECT STATUS */}
+
+              {todayAttendance.map(record => (
+
+                <div
+                  key={record.id}
+                  style={{
+                    display: "flex",
+                    justifyContent:
+                      "space-between",
+                    alignItems: "center",
+                    padding: "11px 0",
+                    borderBottom:
+                      "1px solid var(--border)"
+                  }}
+                >
+
+                  <div>
+
+                    <b
+                      style={{
+                        fontSize: 12
+                      }}
+                    >
+                      {record.subject}
+                    </b>
+
+                    <div
+                      className="small-muted"
+                    >
+                      {record.date}
+                    </div>
+
+                  </div>
+
+
+                  <span
+                    className={
+                      record.present
+                        ? "badge green"
+                        : "badge red"
+                    }
+                  >
+
+                    {record.present
+                      ? "✓ Marked Present"
+                      : "✕ Marked Absent"}
+
+                  </span>
+
+                </div>
+
+              ))}
+
+            </>
+
+          ) : (
+
+            <div className="empty">
+
+              <div
+                style={{
+                  fontSize: 28,
+                  marginBottom: 8
+                }}
+              >
+                📝
+              </div>
+
+              <b>
+                Attendance not marked yet
+              </b>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  marginTop: 5
+                }}
+              >
+                Your attendance will appear
+                here once faculty marks it.
+              </div>
+
+            </div>
+
+          )}
+
+        </div>
+
+
+        {/* ACADEMIC PERFORMANCE */}
 
         <div className="card">
 
@@ -756,121 +1692,187 @@ function StudentDashboard({
 
           </div>
 
-          <div className="chart">
 
-            {myResults.map((r,index) => (
+          {myResults.length > 0 ? (
 
-              <div
-                key={r.id}
-                className="bar"
-                style={{
-                  height:`${Math.max(r.total,15)}%`
-                }}
-              >
-                <span>
-                  {r.total}
-                </span>
-              </div>
+            <>
 
-            ))}
+              <div className="chart">
 
-          </div>
+                {myResults.map(result => (
 
-          <div className="chart-labels">
+                  <div
+                    key={result.id}
+                    className="bar"
+                    style={{
+                      height:
+                        `${Math.max(
+                          Number(
+                            result.total || 0
+                          ),
+                          15
+                        )}%`
+                    }}
+                  >
 
-            {myResults.map(r => (
-              <div key={r.id}>
-                {r.subject.split(" ")[0]}
-              </div>
-            ))}
-
-          </div>
-
-        </div>
-
-
-        <div className="card">
-
-          <div className="section-title">
-
-            <h2>
-              Assignment Status
-            </h2>
-
-            <span>
-              {myAssignments.length} active
-            </span>
-
-          </div>
-
-          {myAssignments.slice(0,4).map(a => {
-
-            const submitted =
-              mySubmissions.some(
-                s => s.assignment_id === a.id
-              );
-
-            return (
-
-              <div
-                key={a.id}
-                style={{
-                  padding:"12px 0",
-                  borderBottom:"1px solid var(--border)"
-                }}
-              >
-
-                <div style={{
-                  display:"flex",
-                  justifyContent:"space-between",
-                  gap:10
-                }}>
-
-                  <div>
-
-                    <div style={{
-                      fontWeight:700,
-                      fontSize:13
-                    }}>
-                      {a.title}
-                    </div>
-
-                    <div style={{
-                      color:"var(--muted)",
-                      fontSize:11,
-                      marginTop:3
-                    }}>
-                      {a.subject} • Due {a.due_date}
-                    </div>
+                    <span>
+                      {result.total}
+                    </span>
 
                   </div>
 
-                  <span className={
-                    "badge " +
-                    (submitted
-                      ? "green"
-                      : "orange")
-                  }>
-                    {submitted
-                      ? "Submitted"
-                      : "Pending"}
-                  </span>
-
-                </div>
+                ))}
 
               </div>
 
-            );
-          })}
+
+              <div className="chart-labels">
+
+                {myResults.map(result => (
+
+                  <div
+                    key={result.id}
+                  >
+                    {String(
+                      result.subject || ""
+                    ).split(" ")[0]}
+                  </div>
+
+                ))}
+
+              </div>
+
+            </>
+
+          ) : (
+
+            <div className="empty">
+              No academic results available yet.
+            </div>
+
+          )}
 
         </div>
 
       </div>
+
+
+      {/* ======================================================
+          ASSIGNMENT STATUS
+      ====================================================== */}
+
+      <div className="card">
+
+        <div className="section-title">
+
+          <h2>
+            Assignment Status
+          </h2>
+
+          <span>
+            {myAssignments.length} active
+          </span>
+
+        </div>
+
+
+        {myAssignments.length > 0 ? (
+
+          myAssignments
+            .slice(0, 4)
+            .map(assignment => {
+
+              const submitted =
+                mySubmissions.some(
+                  submission =>
+                    Number(
+                      submission.assignment_id
+                    ) ===
+                    Number(assignment.id)
+                );
+
+
+              return (
+
+                <div
+                  key={assignment.id}
+                  style={{
+                    padding: "12px 0",
+                    borderBottom:
+                      "1px solid var(--border)"
+                  }}
+                >
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent:
+                        "space-between",
+                      gap: 10
+                    }}
+                  >
+
+                    <div>
+
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          fontSize: 13
+                        }}
+                      >
+                        {assignment.title}
+                      </div>
+
+                      <div
+                        className="small-muted"
+                        style={{
+                          marginTop: 3
+                        }}
+                      >
+                        {assignment.subject}
+                        {" • "}
+                        Due{" "}
+                        {assignment.due_date}
+                      </div>
+
+                    </div>
+
+
+                    <span
+                      className={
+                        submitted
+                          ? "badge green"
+                          : "badge orange"
+                      }
+                    >
+
+                      {submitted
+                        ? "Submitted"
+                        : "Pending"}
+
+                    </span>
+
+                  </div>
+
+                </div>
+
+              );
+
+            })
+
+        ) : (
+
+          <div className="empty">
+            No active assignments.
+          </div>
+
+        )}
+
+      </div>
+
     </>
   );
 }
-
-
 // ============================================================
 // NOTICE
 // ============================================================
@@ -1062,7 +2064,12 @@ function AttendancePage({
           student_id: Number(user.id),
           subject,
           present,
-          date: new Date().toISOString().slice(0, 10)
+          date:
+            `${new Date().getFullYear()}-${String(
+            new Date().getMonth() + 1
+            ).padStart(2, "0")}-${String(
+            new Date().getDate()
+            ).padStart(2, "0")}`
         })
       });
 
@@ -1983,7 +2990,6 @@ function FacultyDashboard({
   );
 }
 
-
 // ============================================================
 // FACULTY ATTENDANCE
 // ============================================================
@@ -1994,40 +3000,155 @@ function FacultyAttendance({
   user
 }) {
 
+  // ------------------------------------------------------------
+  // CURRENT LOCAL DATE
+  // ------------------------------------------------------------
+
+  const now = new Date();
+
+  const todayName = now.toLocaleDateString("en-US", {
+    weekday: "long"
+  });
+
+  const todayDate = now.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+
+  // Local YYYY-MM-DD
+  const todayISO =
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+
+  // ------------------------------------------------------------
+  // STUDENTS OF FACULTY DEPARTMENT
+  // ------------------------------------------------------------
+
   const students =
-    state.users.filter(
-      u => u.role === "student" && u.department === user?.department
+    (state.users || []).filter(
+      u =>
+        u.role === "student" &&
+        u.department === user?.department
     );
 
-  const [subject,setSubject] =
+
+  // ------------------------------------------------------------
+  // SUBJECT
+  // ------------------------------------------------------------
+
+  const [subject, setSubject] =
     useState("Database Management Systems");
 
-  async function mark(studentId,present) {
 
-    await api("/api/attendance", {
-      method:"POST",
-      body:JSON.stringify({
-        student_id:studentId,
-        subject,
-        present
-      })
+  // ------------------------------------------------------------
+  // ATTENDANCE RECORDS
+  // ------------------------------------------------------------
+
+  const attendanceRecords =
+    state.attendance || [];
+
+
+  // ------------------------------------------------------------
+  // GET TODAY'S ATTENDANCE FOR A STUDENT
+  // ------------------------------------------------------------
+
+  function getStudentAttendance(studentId) {
+
+    return attendanceRecords.find(record => {
+
+      return (
+        Number(record.student_id) === Number(studentId) &&
+        String(record.subject) === String(subject) &&
+        String(record.date).slice(0, 10) === todayISO
+      );
+
     });
 
-    refresh();
   }
 
+
+  // ------------------------------------------------------------
+  // MARK ATTENDANCE
+  // ------------------------------------------------------------
+
+  async function mark(studentId, present) {
+
+    try {
+
+      await api("/api/attendance", {
+        method: "POST",
+
+        body: JSON.stringify({
+
+          student_id: Number(studentId),
+
+          subject: subject,
+
+          present: present,
+
+          // IMPORTANT:
+          // Send today's actual local date.
+          date: todayISO
+
+        })
+      });
+
+
+      // Immediately refresh the UI
+      await refresh();
+
+
+    } catch (err) {
+
+      alert(
+        err.message ||
+        "Unable to update attendance."
+      );
+
+    }
+  }
+
+
+  // ------------------------------------------------------------
+  // RENDER
+  // ------------------------------------------------------------
+
   return (
+
     <div className="card">
+
+      {/* ======================================================
+          HEADER
+      ====================================================== */}
 
       <div className="section-title">
 
-        <h2>
-          Attendance Register
-        </h2>
+        <div>
+
+          <h2>
+            Attendance Register
+          </h2>
+
+          <span
+            style={{
+              display: "block",
+              marginTop: 4
+            }}
+          >
+            {todayName}, {todayDate}
+          </span>
+
+        </div>
+
+
+        {/* SUBJECT */}
 
         <select
           value={subject}
-          onChange={e => setSubject(e.target.value)}
+          onChange={e =>
+            setSubject(e.target.value)
+          }
         >
 
           <option>
@@ -2045,73 +3166,216 @@ function FacultyAttendance({
           <option>
             Web Technology
           </option>
+
         </select>
 
       </div>
 
 
-      <table>
+      {/* ======================================================
+          TABLE
+      ====================================================== */}
 
-        <thead>
+      <div className="table-wrap">
 
-          <tr>
-            <th>Student</th>
-            <th>Roll No</th>
-            <th>Department</th>
-            <th>Today's Attendance</th>
-          </tr>
+        <table>
 
-        </thead>
+          <thead>
 
-        <tbody>
+            <tr>
 
-          {students.map(s => (
+              <th>
+                Student
+              </th>
 
-            <tr key={s.id}>
+              <th>
+                Roll No
+              </th>
 
-              <td>
-                <b>{s.name}</b>
-              </td>
+              <th>
+                Department
+              </th>
 
-              <td>{s.roll_no}</td>
-
-              <td>{s.department}</td>
-
-              <td>
-
-                <div className="actions">
-
-                  <button
-                    className="btn success"
-                    onClick={() =>
-                      mark(s.id,true)
-                    }
-                  >
-                    Present
-                  </button>
-
-                  <button
-                    className="btn danger"
-                    onClick={() =>
-                      mark(s.id,false)
-                    }
-                  >
-                    Absent
-                  </button>
-
-                </div>
-
-              </td>
+              <th>
+                Today's Attendance
+              </th>
 
             </tr>
 
-          ))}
+          </thead>
 
-        </tbody>
 
-      </table>
+          <tbody>
+
+            {students.map(student => {
+
+              const record =
+                getStudentAttendance(student.id);
+
+
+              const isMarked =
+                !!record;
+
+
+              const isPresent =
+                record?.present === true;
+
+
+              const isAbsent =
+                record?.present === false;
+
+
+              return (
+
+                <tr key={student.id}>
+
+                  {/* STUDENT */}
+
+                  <td>
+
+                    <b>
+                      {student.name}
+                    </b>
+
+                    <div className="small-muted">
+                      {student.email}
+                    </div>
+
+                  </td>
+
+
+                  {/* ROLL NUMBER */}
+
+                  <td>
+                    {student.roll_no || "—"}
+                  </td>
+
+
+                  {/* DEPARTMENT */}
+
+                  <td>
+                    {student.department || "—"}
+                  </td>
+
+
+                  {/* ATTENDANCE */}
+
+                  <td>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        flexWrap: "wrap"
+                      }}
+                    >
+
+                      {/* --------------------------------------
+                          PRESENT
+                      -------------------------------------- */}
+
+                      <button
+                        className="btn success"
+                        onClick={() =>
+                          mark(student.id, true)
+                        }
+                      >
+
+                        <Check size={13} />
+
+                        {isPresent
+                          ? "Marked Present"
+                          : "Present"}
+
+                      </button>
+
+
+                      {/* --------------------------------------
+                          ABSENT
+                      -------------------------------------- */}
+
+                      <button
+                        className="btn danger"
+                        onClick={() =>
+                          mark(student.id, false)
+                        }
+                      >
+
+                        <XCircle size={13} />
+
+                        {isAbsent
+                          ? "Marked Absent"
+                          : "Absent"}
+
+                      </button>
+
+
+                      {/* --------------------------------------
+                          STATUS
+                      -------------------------------------- */}
+
+                      {isMarked && (
+
+                        <span
+                          className={
+                            isPresent
+                              ? "badge green"
+                              : "badge red"
+                          }
+                        >
+
+                          {isPresent
+                            ? "✓ Marked Present"
+                            : "✕ Marked Absent"}
+
+                        </span>
+
+                      )}
+
+                      {!isMarked && (
+
+                        <span className="badge orange">
+
+                          Not Marked
+
+                        </span>
+
+                      )}
+
+                    </div>
+
+                  </td>
+
+                </tr>
+
+              );
+
+            })}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+
+      {/* ======================================================
+          EMPTY STATE
+      ====================================================== */}
+
+      {students.length === 0 && (
+
+        <div className="empty">
+
+          No students found for your department.
+
+        </div>
+
+      )}
 
     </div>
+
   );
 }
 
